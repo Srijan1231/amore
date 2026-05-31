@@ -1,38 +1,62 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Search, Edit, Trash2, MoreHorizontal } from "lucide-react";
+import { Plus, Search, Edit, Trash2, MoreHorizontal, Loader2 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { formatPrice } from "@/lib/utils";
 
-const products = [
-  { id: "1", name: "Eternal Rose Bouquet", sku: "AMR-DRY-001", price: "£49.99", inventory: 25, status: "Published", category: "Dried & Preserved", image: "https://images.unsplash.com/photo-1455659817273-f96807779a8a?w=100", orders: 42 },
-  { id: "2", name: "Spring Garden Bouquet", sku: "AMR-FRH-001", price: "£34.99", inventory: 40, status: "Published", category: "Fresh Bouquets", image: "https://images.unsplash.com/photo-1490750967868-88aa4f44baee?w=100", orders: 28 },
-  { id: "3", name: "Lavender Dreams", sku: "AMR-DRY-002", price: "£29.99", inventory: 35, status: "Published", category: "Dried & Preserved", image: "https://images.unsplash.com/photo-1468327768560-75b778cbb551?w=100", orders: 19 },
-  { id: "4", name: "Romantic Red Roses", sku: "AMR-FRH-002", price: "£44.99", inventory: 30, status: "Published", category: "Fresh Bouquets", image: "https://images.unsplash.com/photo-1455659817273-f96807779a8a?w=100", orders: 55 },
-  { id: "5", name: "Luxury Gift Hamper", sku: "AMR-GFT-001", price: "£89.99", inventory: 15, status: "Published", category: "Gift Hampers", image: "https://images.unsplash.com/photo-1549488344-cbb6c34cf08b?w=100", orders: 31 },
-  { id: "6", name: "Wildflower Meadow", sku: "AMR-FRH-003", price: "£32.99", inventory: 20, status: "Draft", category: "Fresh Bouquets", image: "https://images.unsplash.com/photo-1487530811176-3780de880c2d?w=100", orders: 14 },
-];
+interface AdminProduct {
+  id: string;
+  name: string;
+  slug: string;
+  sku: string | null;
+  price: number;
+  comparePrice: number | null;
+  inventory: number;
+  isPublished: boolean;
+  images: { url: string; altText: string | null }[];
+  category: { name: string } | null;
+  _count: { reviews: number; orderItems: number };
+}
 
 export default function AdminProductsPage() {
+  const [products, setProducts] = useState<AdminProduct[]>([]);
   const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
 
-  const filtered = products.filter((p) =>
-    p.name.toLowerCase().includes(search.toLowerCase()) ||
-    p.sku.toLowerCase().includes(search.toLowerCase())
-  );
+  useEffect(() => {
+    const params = new URLSearchParams({ limit: "50" });
+    if (search) params.set("search", search);
+
+    const timer = setTimeout(() => {
+      fetch(`/api/admin/products?${params.toString()}`)
+        .then((r) => r.json())
+        .then((json) => {
+          if (json.success && Array.isArray(json.data)) {
+            setProducts(json.data);
+            setTotal(json.meta?.total ?? json.data.length);
+          }
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [search]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-3xl font-bold text-charcoal">Products</h1>
-          <p className="text-muted-foreground mt-1">{products.length} products</p>
+          <p className="text-muted-foreground mt-1">{total} products</p>
         </div>
         <Button>
           <Plus className="h-4 w-4 mr-2" /> Add Product
@@ -49,60 +73,68 @@ export default function AdminProductsPage() {
           </div>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Product</TableHead>
-                <TableHead>SKU</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Inventory</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Orders</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filtered.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-muted">
-                        <Image src={product.image} alt={product.name} fill className="object-cover" sizes="40px" />
-                      </div>
-                      <div>
-                        <p className="font-medium text-sm">{product.name}</p>
-                        <p className="text-xs text-muted-foreground">{product.category}</p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{product.sku}</TableCell>
-                  <TableCell className="font-medium">{product.price}</TableCell>
-                  <TableCell>
-                    <span className={`text-sm ${product.inventory < 20 ? "text-destructive" : "text-muted-foreground"}`}>
-                      {product.inventory}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={product.status === "Published" ? "default" : "secondary"}>
-                      {product.status}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{product.orders}</TableCell>
-                  <TableCell>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
-                        <MoreHorizontal className="h-4 w-4" />
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem><Edit className="h-4 w-4 mr-2" /> Edit</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead>SKU</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Inventory</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Orders</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {products.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="relative w-10 h-10 rounded-lg overflow-hidden bg-muted">
+                          {product.images?.[0] && (
+                            <Image src={product.images[0].url} alt={product.images[0].altText ?? product.name} fill className="object-cover" sizes="40px" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="font-medium text-sm">{product.name}</p>
+                          <p className="text-xs text-muted-foreground">{product.category?.name}</p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{product.sku ?? "—"}</TableCell>
+                    <TableCell className="font-medium">{formatPrice(product.price)}</TableCell>
+                    <TableCell>
+                      <span className={`text-sm ${product.inventory < 20 ? "text-destructive" : "text-muted-foreground"}`}>
+                        {product.inventory}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={product.isPublished ? "default" : "secondary"}>
+                        {product.isPublished ? "Published" : "Draft"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-sm">{product._count.orderItems}</TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />}>
+                          <MoreHorizontal className="h-4 w-4" />
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem><Edit className="h-4 w-4 mr-2" /> Edit</DropdownMenuItem>
+                          <DropdownMenuItem className="text-destructive"><Trash2 className="h-4 w-4 mr-2" /> Delete</DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

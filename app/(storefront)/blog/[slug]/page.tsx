@@ -1,81 +1,93 @@
-import { Metadata } from "next";
+"use client";
+
+import { useState, useEffect, use } from "react";
 import Image from "next/image";
 import { Breadcrumbs } from "@/components/shared/Breadcrumbs";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
-import { Clock, Calendar, User } from "lucide-react";
+import { Clock, Calendar, User, Loader2 } from "lucide-react";
 import { NewsletterSignup } from "@/components/shared/NewsletterSignup";
+import { formatDate, calculateReadTime } from "@/lib/utils";
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const { slug } = await params;
-  const title = slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
-  return {
-    title: `${title} | Amoré Blog`,
-    description: `Read ${title} on the Amoré blog — gift ideas, flower trends, and inspiration.`,
-  };
+interface BlogPost {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  featuredImage: string | null;
+  category: string;
+  publishedAt: string | null;
 }
 
-export default async function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
-  const title = slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+export default function BlogPostPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = use(params);
+  const [post, setPost] = useState<BlogPost | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`/api/blog?slug=${encodeURIComponent(slug)}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data) {
+          setPost(json.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!post) {
+    const fallbackTitle = slug.split("-").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+    return (
+      <div className="container mx-auto px-4 py-12 max-w-3xl text-center">
+        <h1 className="font-heading text-3xl font-bold text-charcoal mb-4">{fallbackTitle}</h1>
+        <p className="text-muted-foreground">This blog post could not be found.</p>
+      </div>
+    );
+  }
 
   return (
     <article>
       <div className="container mx-auto px-4 py-8 max-w-3xl">
-        <Breadcrumbs items={[{ label: "Blog", href: "/blog" }, { label: title }]} />
+        <Breadcrumbs items={[{ label: "Blog", href: "/blog" }, { label: post.title }]} />
 
         <header className="mb-8">
-          <Badge variant="secondary" className="mb-4">Gift Ideas & Inspiration</Badge>
+          <Badge variant="secondary" className="mb-4">{post.category}</Badge>
           <h1 className="font-heading text-4xl md:text-5xl font-bold text-charcoal mb-4">
-            {title}
+            {post.title}
           </h1>
           <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
             <span className="flex items-center gap-1"><User className="h-4 w-4" /> Amoré Team</span>
-            <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> 28 May 2025</span>
-            <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> 5 min read</span>
+            <span className="flex items-center gap-1"><Calendar className="h-4 w-4" /> {post.publishedAt ? formatDate(post.publishedAt) : ""}</span>
+            <span className="flex items-center gap-1"><Clock className="h-4 w-4" /> {calculateReadTime(post.content)} min read</span>
           </div>
         </header>
 
-        <div className="relative aspect-[16/9] rounded-2xl overflow-hidden mb-8">
-          <Image
-            src="https://images.unsplash.com/photo-1455659817273-f96807779a8a?w=1200"
-            alt={title}
-            fill
-            className="object-cover"
-            sizes="(max-width: 768px) 100vw, 768px"
-            priority
-          />
-        </div>
+        {post.featuredImage && (
+          <div className="relative aspect-[16/9] rounded-2xl overflow-hidden mb-8">
+            <Image
+              src={post.featuredImage}
+              alt={post.title}
+              fill
+              className="object-cover"
+              sizes="(max-width: 768px) 100vw, 768px"
+              priority
+            />
+          </div>
+        )}
 
-        <div className="prose prose-lg max-w-none prose-headings:font-heading prose-headings:text-charcoal prose-p:text-muted-foreground prose-a:text-primary">
-          <h2>Finding the Perfect Gift</h2>
-          <p>
-            Finding the perfect gift for a loved one can feel overwhelming. With so many options
-            available, how do you choose something that truly speaks from the heart? At Amoré,
-            we believe the best gifts are those made with care and personalised with love.
-          </p>
-
-          <h3>Why Handmade Gifts Matter</h3>
-          <p>
-            In a world of mass production, there&apos;s something deeply meaningful about receiving
-            a gift that was crafted by hand. Our artisans pour their expertise and passion into
-            every arrangement, ensuring each bouquet is unique and beautiful.
-          </p>
-
-          <h3>Our Top Picks for Every Occasion</h3>
-          <p>
-            Whether you&apos;re celebrating an anniversary, birthday, or just want to brighten
-            someone&apos;s day, our collection has something special for everyone. From preserved
-            rose bouquets that last years to luxury gift hampers filled with artisan treats.
-          </p>
-
-          <h3>Caring for Your Flowers</h3>
-          <p>
-            Preserved flowers require minimal care — simply keep them away from direct sunlight
-            and humidity. Fresh bouquets should be trimmed and placed in clean water, with the
-            water changed every two days for the longest lasting results.
-          </p>
-        </div>
+        <div className="prose prose-lg max-w-none prose-headings:font-heading prose-headings:text-charcoal prose-p:text-muted-foreground prose-a:text-primary"
+          dangerouslySetInnerHTML={{ __html: post.content }}
+        />
 
         <Separator className="my-12" />
 

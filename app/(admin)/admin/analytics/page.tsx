@@ -1,24 +1,61 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Eye, Package, Repeat } from "lucide-react";
+import { TrendingUp, TrendingDown, DollarSign, ShoppingCart, Users, Package, Loader2 } from "lucide-react";
+import { formatPrice } from "@/lib/utils";
+
+interface AnalyticsData {
+  totalOrders: number;
+  recentRevenue: number;
+  avgOrderValue: number;
+  totalCustomers: number;
+  totalProducts: number;
+  pendingOrders: number;
+  recentOrderCount: number;
+}
+
+interface TopProduct {
+  id: string;
+  name: string;
+  slug: string;
+  _count: { orderItems: number };
+}
 
 export default function AdminAnalyticsPage() {
-  const metrics = [
-    { title: "Revenue (30d)", value: "£12,450", change: "+12.5%", up: true, icon: DollarSign },
-    { title: "Orders (30d)", value: "156", change: "+8.2%", up: true, icon: ShoppingCart },
-    { title: "Avg Order Value", value: "£79.81", change: "+4.1%", up: true, icon: Package },
-    { title: "New Customers", value: "42", change: "+15.4%", up: true, icon: Users },
-    { title: "Conversion Rate", value: "3.2%", change: "-0.3%", up: false, icon: TrendingDown },
-    { title: "Page Views", value: "8,421", change: "+22.1%", up: true, icon: Eye },
-    { title: "Return Rate", value: "2.1%", change: "-0.5%", up: true, icon: Repeat },
-    { title: "Cart Abandonment", value: "68%", change: "-3.2%", up: true, icon: ShoppingCart },
-  ];
+  const [data, setData] = useState<AnalyticsData | null>(null);
+  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const topProducts = [
-    { name: "Romantic Red Roses", orders: 55, revenue: "£2,474.45" },
-    { name: "Eternal Rose Bouquet", orders: 42, revenue: "£2,099.58" },
-    { name: "Luxury Gift Hamper", orders: 31, revenue: "£2,789.69" },
-    { name: "Spring Garden Bouquet", orders: 28, revenue: "£979.72" },
-    { name: "Lavender Dreams", orders: 19, revenue: "£569.81" },
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/admin/analytics").then((r) => r.json()),
+      fetch("/api/admin/products?limit=5&sort=orders").then((r) => r.json()),
+    ])
+      .then(([analyticsJson, productsJson]) => {
+        if (analyticsJson.success) setData(analyticsJson.data);
+        if (productsJson.success && Array.isArray(productsJson.data)) {
+          setTopProducts(productsJson.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const metrics = [
+    { title: "Revenue (30d)", value: formatPrice(data?.recentRevenue ?? 0), change: `${data?.recentOrderCount ?? 0} orders`, up: true, icon: DollarSign },
+    { title: "Orders (30d)", value: String(data?.totalOrders ?? 0), change: `${data?.pendingOrders ?? 0} pending`, up: true, icon: ShoppingCart },
+    { title: "Avg Order Value", value: formatPrice(data?.avgOrderValue ?? 0), change: "calculated", up: true, icon: Package },
+    { title: "Customers", value: String(data?.totalCustomers ?? 0), change: "registered", up: true, icon: Users },
+    { title: "Products", value: String(data?.totalProducts ?? 0), change: "published", up: true, icon: Package },
   ];
 
   return (
@@ -28,7 +65,7 @@ export default function AdminAnalyticsPage() {
         <p className="text-muted-foreground mt-1">Performance overview for the last 30 days</p>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         {metrics.map((metric) => (
           <Card key={metric.title}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -52,22 +89,25 @@ export default function AdminAnalyticsPage() {
             <CardTitle>Top Products by Orders</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {topProducts.map((product, i) => (
-                <div key={product.name} className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">
-                      {i + 1}
-                    </span>
-                    <span className="text-sm font-medium">{product.name}</span>
+            {topProducts.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No product data yet</p>
+            ) : (
+              <div className="space-y-4">
+                {topProducts.map((product, i) => (
+                  <div key={product.id} className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="w-6 h-6 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center font-medium">
+                        {i + 1}
+                      </span>
+                      <span className="text-sm font-medium">{product.name}</span>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-muted-foreground">{product._count.orderItems} orders</p>
+                    </div>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-medium">{product.revenue}</p>
-                    <p className="text-xs text-muted-foreground">{product.orders} orders</p>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 

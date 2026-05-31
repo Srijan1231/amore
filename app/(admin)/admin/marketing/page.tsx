@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,18 +9,89 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, Ticket, Trash2 } from "lucide-react";
+import { Plus, Ticket, Trash2, Loader2 } from "lucide-react";
+import { formatPrice, formatDate } from "@/lib/utils";
 
-const coupons = [
-  { code: "WELCOME10", type: "Percentage", value: "10%", minOrder: "£25", uses: "142/∞", status: "Active", expires: "Never" },
-  { code: "FREESHIP", type: "Free Shipping", value: "—", minOrder: "£40", uses: "89/∞", status: "Active", expires: "Never" },
-  { code: "LOVE20", type: "Fixed", value: "£20", minOrder: "£60", uses: "23/100", status: "Active", expires: "31 Dec 2025" },
-  { code: "SUMMER15", type: "Percentage", value: "15%", minOrder: "£30", uses: "0/50", status: "Scheduled", expires: "31 Aug 2025" },
-];
+interface Coupon {
+  id: string;
+  code: string;
+  type: string;
+  value: number;
+  minOrderValue: number | null;
+  maxUses: number | null;
+  usedCount: number;
+  isActive: boolean;
+  expiresAt: string | null;
+  startsAt: string | null;
+}
 
 export default function AdminMarketingPage() {
+  const [coupons, setCoupons] = useState<Coupon[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [creating, setCreating] = useState(false);
   const [newCode, setNewCode] = useState("");
   const [newType, setNewType] = useState("PERCENTAGE");
+  const [newValue, setNewValue] = useState("");
+  const [newMinOrder, setNewMinOrder] = useState("");
+
+  const fetchCoupons = useCallback(() => {
+    fetch("/api/admin/marketing")
+      .then((r) => r.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setCoupons(json.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { fetchCoupons(); }, [fetchCoupons]);
+
+  const handleCreate = async () => {
+    if (!newCode || !newValue) return;
+    setCreating(true);
+
+    try {
+      const res = await fetch("/api/admin/marketing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: newCode.toUpperCase(),
+          type: newType,
+          value: parseFloat(newValue),
+          minOrderValue: newMinOrder ? parseFloat(newMinOrder) : undefined,
+        }),
+      });
+
+      const json = await res.json();
+      if (json.success) {
+        setNewCode("");
+        setNewValue("");
+        setNewMinOrder("");
+        fetchCoupons();
+      }
+    } catch {
+      // handle error silently
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const formatType = (type: string) => {
+    switch (type) {
+      case "PERCENTAGE": return "Percentage";
+      case "FIXED": return "Fixed";
+      case "FREE_SHIPPING": return "Free Shipping";
+      default: return type;
+    }
+  };
+
+  const formatValue = (coupon: Coupon) => {
+    if (coupon.type === "PERCENTAGE") return `${coupon.value}%`;
+    if (coupon.type === "FREE_SHIPPING") return "—";
+    return formatPrice(coupon.value);
+  };
 
   return (
     <div>
@@ -55,13 +126,16 @@ export default function AdminMarketingPage() {
               </div>
               <div>
                 <Label>Value</Label>
-                <Input type="number" placeholder={newType === "PERCENTAGE" ? "10" : "5.00"} />
+                <Input type="number" value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder={newType === "PERCENTAGE" ? "10" : "5.00"} />
               </div>
               <div>
                 <Label>Minimum Order Value (optional)</Label>
-                <Input type="number" placeholder="25.00" />
+                <Input type="number" value={newMinOrder} onChange={(e) => setNewMinOrder(e.target.value)} placeholder="25.00" />
               </div>
-              <Button className="w-full">Create Coupon</Button>
+              <Button className="w-full" onClick={handleCreate} disabled={creating}>
+                {creating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+                Create Coupon
+              </Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -70,44 +144,58 @@ export default function AdminMarketingPage() {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Ticket className="h-5 w-5" /> Active Coupons
+            <Ticket className="h-5 w-5" /> Coupons
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Value</TableHead>
-                <TableHead>Min Order</TableHead>
-                <TableHead>Uses</TableHead>
-                <TableHead>Expires</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="w-12"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {coupons.map((coupon) => (
-                <TableRow key={coupon.code}>
-                  <TableCell className="font-mono font-medium">{coupon.code}</TableCell>
-                  <TableCell className="text-sm">{coupon.type}</TableCell>
-                  <TableCell className="font-medium">{coupon.value}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{coupon.minOrder}</TableCell>
-                  <TableCell className="text-sm">{coupon.uses}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">{coupon.expires}</TableCell>
-                  <TableCell>
-                    <Badge variant={coupon.status === "Active" ? "default" : "secondary"}>{coupon.status}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Button variant="ghost" size="icon" className="text-destructive">
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+          {loading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Value</TableHead>
+                  <TableHead>Min Order</TableHead>
+                  <TableHead>Uses</TableHead>
+                  <TableHead>Expires</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="w-12"></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {coupons.map((coupon) => (
+                  <TableRow key={coupon.id}>
+                    <TableCell className="font-mono font-medium">{coupon.code}</TableCell>
+                    <TableCell className="text-sm">{formatType(coupon.type)}</TableCell>
+                    <TableCell className="font-medium">{formatValue(coupon)}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {coupon.minOrderValue ? formatPrice(coupon.minOrderValue) : "—"}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {coupon.usedCount}/{coupon.maxUses ?? "∞"}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {coupon.expiresAt ? formatDate(coupon.expiresAt) : "Never"}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={coupon.isActive ? "default" : "secondary"}>
+                        {coupon.isActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Button variant="ghost" size="icon" className="text-destructive">
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

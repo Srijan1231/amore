@@ -1,46 +1,40 @@
-import { Metadata } from "next";
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
-import { Clock, ArrowRight } from "lucide-react";
+import { Clock, ArrowRight, Loader2 } from "lucide-react";
+import { formatDate, calculateReadTime } from "@/lib/utils";
 
-export const metadata: Metadata = {
-  title: "Blog — Gift Ideas, Flower Trends & Inspiration | Amoré",
-  description: "Discover gift guides, flower care tips, seasonal inspiration, and behind-the-craft stories from the Amoré team.",
-};
-
-const posts = [
-  {
-    slug: "best-anniversary-gift-ideas-2025",
-    title: "10 Best Anniversary Gift Ideas for 2025",
-    excerpt: "From preserved rose bouquets to luxury hampers, discover the most thoughtful anniversary gifts.",
-    image: "https://images.unsplash.com/photo-1455659817273-f96807779a8a?w=800",
-    category: "Gift Ideas & Inspiration",
-    readTime: 5,
-    date: "28 May 2025",
-  },
-  {
-    slug: "fresh-vs-dried-bouquets",
-    title: "Fresh vs Dried Bouquets — Which Lasts Longer?",
-    excerpt: "Wondering whether to choose fresh or dried flowers? We compare longevity, care, and aesthetics.",
-    image: "https://images.unsplash.com/photo-1468327768560-75b778cbb551?w=800",
-    category: "Flower Trends",
-    readTime: 4,
-    date: "25 May 2025",
-  },
-  {
-    slug: "valentines-day-gift-guide",
-    title: "The Ultimate Valentine's Day Gift Guide",
-    excerpt: "Make this Valentine's Day unforgettable with our curated selection of romantic gifts.",
-    image: "https://images.unsplash.com/photo-1490750967868-88aa4f44baee?w=800",
-    category: "Holiday Collections",
-    readTime: 6,
-    date: "20 May 2025",
-  },
-];
+interface BlogPost {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  content: string;
+  featuredImage: string | null;
+  category: string;
+  publishedAt: string | null;
+}
 
 export default function BlogPage() {
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("/api/blog")
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && Array.isArray(json.data)) {
+          setPosts(json.data);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
   return (
     <div className="container mx-auto px-4 py-12">
       <div className="text-center mb-12">
@@ -50,42 +44,54 @@ export default function BlogPage() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
-        {posts.map((post) => (
-          <Link key={post.slug} href={`/blog/${post.slug}`} className="group">
-            <Card className="overflow-hidden h-full">
-              <div className="relative aspect-[16/10] overflow-hidden">
-                <Image
-                  src={post.image}
-                  alt={post.title}
-                  fill
-                  className="object-cover transition-transform duration-500 group-hover:scale-105"
-                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
-                />
-              </div>
-              <CardContent className="p-6">
-                <Badge variant="secondary" className="mb-3">{post.category}</Badge>
-                <h2 className="font-heading text-xl font-semibold text-charcoal group-hover:text-primary transition-colors mb-2 line-clamp-2">
-                  {post.title}
-                </h2>
-                <p className="text-muted-foreground text-sm line-clamp-2 mb-4">
-                  {post.excerpt}
-                </p>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    <span>{post.readTime} min read</span>
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      ) : posts.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-muted-foreground">No blog posts yet. Check back soon!</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          {posts.map((post) => (
+            <Link key={post.slug} href={`/blog/${post.slug}`} className="group">
+              <Card className="overflow-hidden h-full">
+                <div className="relative aspect-[16/10] overflow-hidden">
+                  {post.featuredImage && (
+                    <Image
+                      src={post.featuredImage}
+                      alt={post.title}
+                      fill
+                      className="object-cover transition-transform duration-500 group-hover:scale-105"
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
+                    />
+                  )}
+                </div>
+                <CardContent className="p-6">
+                  <Badge variant="secondary" className="mb-3">{post.category}</Badge>
+                  <h2 className="font-heading text-xl font-semibold text-charcoal group-hover:text-primary transition-colors mb-2 line-clamp-2">
+                    {post.title}
+                  </h2>
+                  <p className="text-muted-foreground text-sm line-clamp-2 mb-4">
+                    {post.excerpt}
+                  </p>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <div className="flex items-center gap-1">
+                      <Clock className="h-3.5 w-3.5" />
+                      <span>{calculateReadTime(post.content)} min read</span>
+                    </div>
+                    <span>{post.publishedAt ? formatDate(post.publishedAt) : ""}</span>
                   </div>
-                  <span>{post.date}</span>
-                </div>
-                <div className="flex items-center gap-1 text-primary text-sm font-medium mt-4 group-hover:gap-2 transition-all">
-                  Read More <ArrowRight className="h-3.5 w-3.5" />
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
-      </div>
+                  <div className="flex items-center gap-1 text-primary text-sm font-medium mt-4 group-hover:gap-2 transition-all">
+                    Read More <ArrowRight className="h-3.5 w-3.5" />
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

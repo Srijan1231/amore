@@ -7,8 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Gift, Sparkles } from "lucide-react";
+import { ArrowLeft, Gift, Sparkles, Loader2 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { formatPrice } from "@/lib/utils";
+import type { Product } from "@/types";
+
+type ProductWithRating = Product & { avgRating: number; reviewCount: number };
 
 const questions = [
   {
@@ -45,30 +49,65 @@ const questions = [
   },
 ];
 
-const recommendations = [
-  { name: "Eternal Rose Bouquet", slug: "eternal-rose-bouquet", price: "£49.99", image: "https://images.unsplash.com/photo-1455659817273-f96807779a8a?w=600", match: 98 },
-  { name: "Lavender Dreams", slug: "lavender-dreams", price: "£29.99", image: "https://images.unsplash.com/photo-1468327768560-75b778cbb551?w=600", match: 95 },
-  { name: "Luxury Gift Hamper", slug: "luxury-gift-hamper", price: "£89.99", image: "https://images.unsplash.com/photo-1549488344-cbb6c34cf08b?w=600", match: 92 },
-];
+function budgetToRange(budget: string): { min: number; max: number } {
+  switch (budget) {
+    case "under-30": return { min: 0, max: 30 };
+    case "30-50": return { min: 30, max: 50 };
+    case "50-80": return { min: 50, max: 80 };
+    case "80-plus": return { min: 80, max: 500 };
+    default: return { min: 0, max: 500 };
+  }
+}
 
 export default function GiftFinderPage() {
   const [step, setStep] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [showResults, setShowResults] = useState(false);
+  const [recommendations, setRecommendations] = useState<ProductWithRating[]>([]);
+  const [loading, setLoading] = useState(false);
 
   const currentQuestion = questions[step];
   const progress = ((step + 1) / questions.length) * 100;
 
-  const handleAnswer = (value: string) => {
+  const handleAnswer = async (value: string) => {
     const newAnswers = { ...answers, [currentQuestion.id]: value };
     setAnswers(newAnswers);
 
     if (step < questions.length - 1) {
       setStep(step + 1);
     } else {
-      setShowResults(true);
+      setLoading(true);
+      const range = budgetToRange(newAnswers.budget);
+      const params = new URLSearchParams({
+        minPrice: String(range.min),
+        maxPrice: String(range.max),
+        limit: "6",
+        sort: "newest",
+      });
+
+      try {
+        const res = await fetch(`/api/products?${params.toString()}`);
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          setRecommendations(json.data);
+        }
+      } catch {
+        // fail silently
+      } finally {
+        setLoading(false);
+        setShowResults(true);
+      }
     }
   };
+
+  if (loading) {
+    return (
+      <div className="container mx-auto px-4 py-20 text-center">
+        <Loader2 className="h-10 w-10 animate-spin text-primary mx-auto mb-4" />
+        <p className="text-muted-foreground">Finding your perfect gifts...</p>
+      </div>
+    );
+  }
 
   if (showResults) {
     return (
@@ -83,27 +122,39 @@ export default function GiftFinderPage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {recommendations.map((rec) => (
-            <Link key={rec.slug} href={`/shop/${rec.slug}`} className="group">
-              <Card className="overflow-hidden">
-                <div className="relative aspect-square">
-                  <Image src={rec.image} alt={rec.name} fill className="object-cover group-hover:scale-105 transition-transform duration-500" sizes="(max-width: 768px) 100vw, 33vw" />
-                  <span className="absolute top-3 left-3 bg-primary text-primary-foreground text-xs px-3 py-1 rounded-full font-medium">
-                    {rec.match}% Match
-                  </span>
-                </div>
-                <CardContent className="p-4">
-                  <h3 className="font-medium group-hover:text-primary transition-colors">{rec.name}</h3>
-                  <p className="font-semibold text-primary">{rec.price}</p>
-                </CardContent>
-              </Card>
-            </Link>
-          ))}
-        </div>
+        {recommendations.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-muted-foreground mb-4">No products match these criteria right now.</p>
+            <Link href="/shop" className="text-primary hover:underline">Browse all products</Link>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+            {recommendations.map((product) => (
+              <Link key={product.id} href={`/shop/${product.slug}`} className="group">
+                <Card className="overflow-hidden">
+                  <div className="relative aspect-square">
+                    {product.images?.[0] && (
+                      <Image
+                        src={product.images[0].url}
+                        alt={product.images[0].altText ?? product.name}
+                        fill
+                        className="object-cover group-hover:scale-105 transition-transform duration-500"
+                        sizes="(max-width: 768px) 100vw, 33vw"
+                      />
+                    )}
+                  </div>
+                  <CardContent className="p-4">
+                    <h3 className="font-medium group-hover:text-primary transition-colors">{product.name}</h3>
+                    <p className="font-semibold text-primary">{formatPrice(Number(product.price))}</p>
+                  </CardContent>
+                </Card>
+              </Link>
+            ))}
+          </div>
+        )}
 
         <div className="text-center">
-          <Button variant="outline" onClick={() => { setShowResults(false); setStep(0); setAnswers({}); }}>
+          <Button variant="outline" onClick={() => { setShowResults(false); setStep(0); setAnswers({}); setRecommendations([]); }}>
             Start Over
           </Button>
         </div>

@@ -11,14 +11,20 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
-import { CreditCard, Truck, Gift, CheckCircle2 } from "lucide-react";
+import { CreditCard, Truck, Gift, CheckCircle2, Loader2 } from "lucide-react";
 import { checkoutSchema, type CheckoutInput } from "@/schemas/checkout";
+import { useCart } from "@/hooks/useCart";
+import { formatPrice } from "@/lib/utils";
 
 const steps = ["Contact", "Delivery", "Payment", "Confirmation"];
 
 export function CheckoutForm() {
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [orderNumber, setOrderNumber] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const { subtotal, clearCart, couponCode } = useCart();
 
   const form = useForm<CheckoutInput>({
     resolver: zodResolver(checkoutSchema),
@@ -32,9 +38,36 @@ export function CheckoutForm() {
 
   const { register, handleSubmit, formState: { errors } } = form;
 
-  const onSubmit = () => {
-    setIsSubmitted(true);
-    setCurrentStep(3);
+  const onSubmit = async (data: CheckoutInput) => {
+    setIsSubmitting(true);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...data,
+          couponCode: couponCode || undefined,
+          cartSubtotal: subtotal,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (json.success && json.data) {
+        setOrderNumber(json.data.orderNumber);
+        setIsSubmitted(true);
+        setCurrentStep(3);
+        clearCart();
+      } else {
+        setError(json.error ?? "Something went wrong. Please try again.");
+      }
+    } catch {
+      setError("Network error. Please check your connection and try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (isSubmitted) {
@@ -43,7 +76,7 @@ export function CheckoutForm() {
         <CheckCircle2 className="h-20 w-20 text-sage mx-auto mb-6" />
         <h2 className="font-heading text-3xl font-bold text-charcoal mb-3">Thank You!</h2>
         <p className="text-muted-foreground mb-2">Your order has been placed successfully.</p>
-        <p className="text-muted-foreground mb-6">Order number: <strong>AMR-DEMO-001</strong></p>
+        <p className="text-muted-foreground mb-6">Order number: <strong>{orderNumber}</strong></p>
         <p className="text-sm text-muted-foreground">A confirmation email has been sent to your email address.</p>
       </div>
     );
@@ -62,6 +95,20 @@ export function CheckoutForm() {
         </div>
         <Progress value={((currentStep + 1) / steps.length) * 100} className="h-2" />
       </div>
+
+      {error && (
+        <div className="bg-destructive/10 text-destructive rounded-lg p-4 mb-6 text-sm">{error}</div>
+      )}
+
+      {/* Order Summary */}
+      <Card className="mb-6">
+        <CardContent className="pt-6">
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground">Subtotal</span>
+            <span className="font-medium">{formatPrice(subtotal)}</span>
+          </div>
+        </CardContent>
+      </Card>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-8">
         {/* Step 1: Contact */}
@@ -197,7 +244,13 @@ export function CheckoutForm() {
                 </div>
                 <div className="flex gap-3">
                   <Button type="button" variant="outline" onClick={() => setCurrentStep(1)}>Back</Button>
-                  <Button type="submit" className="flex-1">Place Order</Button>
+                  <Button type="submit" className="flex-1" disabled={isSubmitting}>
+                    {isSubmitting ? (
+                      <><Loader2 className="h-4 w-4 mr-2 animate-spin" /> Processing...</>
+                    ) : (
+                      `Place Order — ${formatPrice(subtotal)}`
+                    )}
+                  </Button>
                 </div>
               </CardContent>
             </Card>

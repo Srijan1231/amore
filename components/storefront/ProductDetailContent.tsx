@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Star, Heart, ShoppingBag, Truck, Shield, RotateCcw, Share2, Minus, Plus } from "lucide-react";
+import { Star, Heart, ShoppingBag, Truck, Shield, RotateCcw, Share2, Minus, Plus, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -11,41 +11,66 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Textarea } from "@/components/ui/textarea";
 import { formatPrice } from "@/lib/utils";
 import { fadeInUp } from "@/lib/animations";
+import { useCart } from "@/hooks/useCart";
+import type { Product, ProductVariant, Review as ReviewType } from "@/types";
 
 interface ProductDetailContentProps {
   slug: string;
 }
 
-const product = {
-  name: "Eternal Rose Bouquet",
-  price: 49.99,
-  comparePrice: 65.00,
-  images: [
-    "https://images.unsplash.com/photo-1455659817273-f96807779a8a?w=800",
-    "https://images.unsplash.com/photo-1490750967868-88aa4f44baee?w=800",
-    "https://images.unsplash.com/photo-1468327768560-75b778cbb551?w=800",
-  ],
-  description: "Looking for the perfect anniversary gift? Our Eternal Rose Bouquet is handcrafted with preserved roses that last up to 3 years — no watering required. Each bloom is carefully selected and preserved at peak beauty.",
-  variants: [
-    { id: "s", name: "Small (6 roses)", price: 39.99 },
-    { id: "m", name: "Medium (12 roses)", price: 49.99 },
-    { id: "l", name: "Large (24 roses)", price: 79.99 },
-  ],
-  avgRating: 4.9,
-  reviewCount: 42,
-  inventory: 25,
-  category: "Dried & Preserved",
-  tags: ["roses", "preserved", "anniversary"],
+type FullProduct = Product & {
+  avgRating: number;
+  reviewCount: number;
+  reviews?: (ReviewType & { user?: { name: string | null } | null })[];
 };
 
-export function ProductDetailContent(_props: ProductDetailContentProps) {
+export function ProductDetailContent({ slug }: ProductDetailContentProps) {
+  const [product, setProduct] = useState<FullProduct | null>(null);
+  const [loading, setLoading] = useState(true);
   const [selectedImage, setSelectedImage] = useState(0);
-  const [selectedVariant, setSelectedVariant] = useState("m");
+  const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [quantity, setQuantity] = useState(1);
   const [personalisation, setPersonalisation] = useState("");
+  const { addToCart } = useCart();
 
-  const currentVariant = product.variants.find((v) => v.id === selectedVariant);
-  const currentPrice = currentVariant?.price ?? product.price;
+  useEffect(() => {
+    fetch(`/api/products/${slug}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.success && json.data) {
+          setProduct(json.data);
+          if (json.data.variants?.length > 0) {
+            setSelectedVariant(json.data.variants[0].id);
+          }
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [slug]);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!product) {
+    return (
+      <div className="text-center py-20">
+        <h2 className="text-2xl font-heading font-semibold text-charcoal mb-2">Product not found</h2>
+        <p className="text-muted-foreground">The product you&apos;re looking for doesn&apos;t exist or has been removed.</p>
+      </div>
+    );
+  }
+
+  const currentVariant = product.variants?.find((v: ProductVariant) => v.id === selectedVariant);
+  const currentPrice = currentVariant?.price ?? Number(product.price);
+
+  const handleAddToCart = () => {
+    addToCart(product, quantity, selectedVariant, personalisation || null);
+  };
 
   return (
     <motion.div
@@ -57,28 +82,30 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
       {/* Image Gallery */}
       <div className="space-y-4">
         <div className="relative aspect-square overflow-hidden rounded-2xl bg-muted">
-          <Image
-            src={product.images[selectedImage]}
-            alt={product.name}
-            fill
-            className="object-cover"
-            sizes="(max-width: 1024px) 100vw, 50vw"
-            priority
-          />
-          {product.comparePrice && (
+          {product.images?.[selectedImage] && (
+            <Image
+              src={product.images[selectedImage].url}
+              alt={product.images[selectedImage].altText ?? product.name}
+              fill
+              className="object-cover"
+              sizes="(max-width: 1024px) 100vw, 50vw"
+              priority
+            />
+          )}
+          {product.comparePrice && product.comparePrice > Number(product.price) && (
             <Badge className="absolute top-4 left-4 bg-primary text-primary-foreground">
-              {Math.round((1 - product.price / product.comparePrice) * 100)}% Off
+              {Math.round((1 - Number(product.price) / product.comparePrice) * 100)}% Off
             </Badge>
           )}
         </div>
         <div className="flex gap-3">
-          {product.images.map((img, i) => (
+          {product.images?.map((img, i) => (
             <button
-              key={i}
+              key={img.id}
               onClick={() => setSelectedImage(i)}
               className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 transition-colors ${selectedImage === i ? "border-primary" : "border-transparent"}`}
             >
-              <Image src={img} alt="" fill className="object-cover" sizes="80px" />
+              <Image src={img.url} alt={img.altText ?? ""} fill className="object-cover" sizes="80px" />
             </button>
           ))}
         </div>
@@ -88,7 +115,7 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
       <div className="space-y-6">
         <div>
           <p className="text-sm text-muted-foreground uppercase tracking-wider mb-1">
-            {product.category}
+            {product.category?.name}
           </p>
           <h1 className="font-heading text-3xl md:text-4xl font-bold text-charcoal">
             {product.name}
@@ -103,14 +130,14 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
             ))}
           </div>
           <span className="text-sm text-muted-foreground">
-            {product.avgRating} ({product.reviewCount} reviews)
+            {product.avgRating.toFixed(1)} ({product.reviewCount} reviews)
           </span>
         </div>
 
         {/* Price */}
         <div className="flex items-baseline gap-3">
           <span className="text-3xl font-bold text-charcoal">{formatPrice(currentPrice)}</span>
-          {product.comparePrice && (
+          {product.comparePrice && product.comparePrice > Number(product.price) && (
             <span className="text-lg text-muted-foreground line-through">
               {formatPrice(product.comparePrice)}
             </span>
@@ -122,21 +149,23 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
         <Separator />
 
         {/* Variants */}
-        <div>
-          <p className="font-medium mb-3">Size</p>
-          <div className="flex flex-wrap gap-3">
-            {product.variants.map((v) => (
-              <Button
-                key={v.id}
-                variant={selectedVariant === v.id ? "default" : "outline"}
-                onClick={() => setSelectedVariant(v.id)}
-                className="flex-1 min-w-[140px]"
-              >
-                {v.name} — {formatPrice(v.price)}
-              </Button>
-            ))}
+        {product.variants && product.variants.length > 0 && (
+          <div>
+            <p className="font-medium mb-3">Size</p>
+            <div className="flex flex-wrap gap-3">
+              {product.variants.map((v: ProductVariant) => (
+                <Button
+                  key={v.id}
+                  variant={selectedVariant === v.id ? "default" : "outline"}
+                  onClick={() => setSelectedVariant(v.id)}
+                  className="flex-1 min-w-[140px]"
+                >
+                  {v.value} — {formatPrice(Number(v.price ?? product.price))}
+                </Button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
         {/* Personalisation */}
         <div>
@@ -162,7 +191,7 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
               <Plus className="h-4 w-4" />
             </Button>
           </div>
-          <Button size="lg" className="flex-1">
+          <Button size="lg" className="flex-1" onClick={handleAddToCart}>
             <ShoppingBag className="h-5 w-5 mr-2" />
             Add to Cart — {formatPrice(currentPrice * quantity)}
           </Button>
@@ -196,6 +225,30 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
           <Button variant="ghost" size="sm">WhatsApp</Button>
         </div>
 
+        {/* Reviews */}
+        {product.reviews && product.reviews.length > 0 && (
+          <div className="pt-4">
+            <h3 className="font-heading text-xl font-semibold mb-4">Customer Reviews</h3>
+            <div className="space-y-4">
+              {product.reviews.slice(0, 5).map((review) => (
+                <div key={review.id} className="border rounded-lg p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className="flex gap-0.5">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className={`h-3.5 w-3.5 ${i < review.rating ? "fill-yellow-400 text-yellow-400" : "text-muted"}`} />
+                      ))}
+                    </div>
+                    <span className="text-sm font-medium">{review.user?.name ?? "Customer"}</span>
+                    {review.isVerified && <Badge variant="secondary" className="text-xs">Verified</Badge>}
+                  </div>
+                  {review.title && <p className="font-medium text-sm">{review.title}</p>}
+                  <p className="text-sm text-muted-foreground">{review.body}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Accordion Details */}
         <Accordion className="w-full">
           <AccordionItem value="care">
@@ -213,21 +266,6 @@ export function ProductDetailContent(_props: ProductDetailContentProps) {
                 <li>Same-Day Delivery: Order before 1pm — £14.99</li>
                 <li>Free delivery on all orders over £50</li>
               </ul>
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="faq">
-            <AccordionTrigger>FAQs</AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-4 text-sm">
-                <div>
-                  <p className="font-medium">How long do preserved roses last?</p>
-                  <p className="text-muted-foreground">Our preserved roses last 1–3 years with proper care.</p>
-                </div>
-                <div>
-                  <p className="font-medium">Can I personalise the gift card?</p>
-                  <p className="text-muted-foreground">Yes! Add your message in the personalisation field above.</p>
-                </div>
-              </div>
             </AccordionContent>
           </AccordionItem>
         </Accordion>

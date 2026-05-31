@@ -1,20 +1,61 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { DollarSign, Package, ShoppingCart, Users, TrendingUp, Clock } from "lucide-react";
+import { DollarSign, Package, ShoppingCart, Users, TrendingUp, Clock, Loader2 } from "lucide-react";
+import { formatPrice, formatDate } from "@/lib/utils";
+
+interface AnalyticsData {
+  totalOrders: number;
+  recentRevenue: number;
+  avgOrderValue: number;
+  totalCustomers: number;
+  totalProducts: number;
+  pendingOrders: number;
+  recentOrderCount: number;
+}
+
+interface RecentOrder {
+  id: string;
+  orderNumber: string;
+  guestEmail: string | null;
+  total: number;
+  status: string;
+  createdAt: string;
+  user?: { name: string | null; email: string | null } | null;
+}
 
 export default function AdminDashboard() {
-  const stats = [
-    { title: "Total Revenue", value: "£12,450", change: "+12.5%", icon: DollarSign },
-    { title: "Orders", value: "156", change: "+8.2%", icon: ShoppingCart },
-    { title: "Products", value: "42", change: "+3", icon: Package },
-    { title: "Customers", value: "289", change: "+15.4%", icon: Users },
-  ];
+  const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
+  const [orders, setOrders] = useState<RecentOrder[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const recentOrders = [
-    { id: "AMR-00156", customer: "Sarah J.", total: "£89.99", status: "Processing", time: "2 hours ago" },
-    { id: "AMR-00155", customer: "Emma T.", total: "£49.99", status: "Fulfilled", time: "5 hours ago" },
-    { id: "AMR-00154", customer: "James R.", total: "£64.99", status: "Delivered", time: "1 day ago" },
-    { id: "AMR-00153", customer: "Guest", total: "£34.99", status: "Pending", time: "1 day ago" },
-    { id: "AMR-00152", customer: "Lucy M.", total: "£129.99", status: "Delivered", time: "2 days ago" },
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/admin/analytics").then((r) => r.json()),
+      fetch("/api/admin/orders?limit=5").then((r) => r.json()),
+    ])
+      .then(([analyticsJson, ordersJson]) => {
+        if (analyticsJson.success) setAnalytics(analyticsJson.data);
+        if (ordersJson.success) setOrders(ordersJson.data);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const stats = [
+    { title: "Total Revenue", value: formatPrice(analytics?.recentRevenue ?? 0), change: `${analytics?.recentOrderCount ?? 0} orders`, icon: DollarSign },
+    { title: "Orders", value: String(analytics?.totalOrders ?? 0), change: `${analytics?.pendingOrders ?? 0} pending`, icon: ShoppingCart },
+    { title: "Products", value: String(analytics?.totalProducts ?? 0), change: "published", icon: Package },
+    { title: "Customers", value: String(analytics?.totalCustomers ?? 0), change: "registered", icon: Users },
   ];
 
   return (
@@ -24,7 +65,6 @@ export default function AdminDashboard() {
         <p className="text-muted-foreground mt-1">Welcome back to Amoré admin</p>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         {stats.map((stat) => (
           <Card key={stat.title}>
@@ -37,47 +77,50 @@ export default function AdminDashboard() {
             <CardContent>
               <div className="text-2xl font-bold">{stat.value}</div>
               <p className="text-xs text-sage flex items-center gap-1 mt-1">
-                <TrendingUp className="h-3 w-3" /> {stat.change} from last month
+                <TrendingUp className="h-3 w-3" /> {stat.change}
               </p>
             </CardContent>
           </Card>
         ))}
       </div>
 
-      {/* Recent Orders */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Orders</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {recentOrders.map((order) => (
-              <div key={order.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
-                <div className="flex items-center gap-4">
-                  <div>
-                    <p className="font-medium text-sm">{order.id}</p>
-                    <p className="text-xs text-muted-foreground">{order.customer}</p>
+          {orders.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-4">No orders yet</p>
+          ) : (
+            <div className="space-y-4">
+              {orders.map((order) => (
+                <div key={order.id} className="flex items-center justify-between border-b last:border-0 pb-4 last:pb-0">
+                  <div className="flex items-center gap-4">
+                    <div>
+                      <p className="font-medium text-sm">{order.orderNumber}</p>
+                      <p className="text-xs text-muted-foreground">{order.user?.name ?? order.guestEmail ?? "Guest"}</p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium text-sm">{formatPrice(order.total)}</p>
+                    <div className="flex items-center gap-2 justify-end">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        order.status === "DELIVERED" ? "bg-sage/20 text-sage" :
+                        order.status === "PROCESSING" ? "bg-lavender/20 text-lavender" :
+                        order.status === "FULFILLED" ? "bg-blush/20 text-blush" :
+                        "bg-muted text-muted-foreground"
+                      }`}>
+                        {order.status}
+                      </span>
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Clock className="h-3 w-3" /> {formatDate(order.createdAt)}
+                      </span>
+                    </div>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-medium text-sm">{order.total}</p>
-                  <div className="flex items-center gap-2 justify-end">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      order.status === "Delivered" ? "bg-sage/20 text-sage" :
-                      order.status === "Processing" ? "bg-lavender/20 text-lavender" :
-                      order.status === "Fulfilled" ? "bg-blush/20 text-blush" :
-                      "bg-muted text-muted-foreground"
-                    }`}>
-                      {order.status}
-                    </span>
-                    <span className="text-xs text-muted-foreground flex items-center gap-1">
-                      <Clock className="h-3 w-3" /> {order.time}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

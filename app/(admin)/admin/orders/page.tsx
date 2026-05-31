@@ -18,7 +18,7 @@ interface AdminOrder {
   shippingMethod: string;
   createdAt: string;
   user: { name: string | null; email: string | null } | null;
-  _count: { items: number };
+  items?: { id: string }[];
 }
 
 const statusColors: Record<string, string> = {
@@ -110,7 +110,7 @@ export default function AdminOrdersPage() {
                   <TableRow key={order.id}>
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell className="text-sm">{order.user?.name ?? order.guestEmail ?? "Guest"}</TableCell>
-                    <TableCell className="text-sm">{order._count.items}</TableCell>
+                    <TableCell className="text-sm">{order.items?.length ?? 0}</TableCell>
                     <TableCell className="font-medium">{formatPrice(order.total)}</TableCell>
                     <TableCell>
                       <Badge className={statusColors[order.status] ?? "bg-muted"}>

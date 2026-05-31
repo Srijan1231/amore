@@ -26,7 +26,7 @@ export const db = new Proxy({} as PrismaClient, {
     const client = getPrismaClient();
     const value = client[prop as keyof PrismaClient];
     if (typeof value === "function") {
-      return (value as Function).bind(client);
+      return (value as (...args: unknown[]) => unknown).bind(client);
     }
     return value;
   },

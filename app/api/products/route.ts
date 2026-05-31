@@ -48,20 +48,18 @@ export async function GET(request: NextRequest) {
       }
     })();
 
-    const [products, total] = await Promise.all([
-      db.product.findMany({
-        where,
-        orderBy,
-        take: limit + 1,
-        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-        include: {
-          images: { orderBy: { position: "asc" } },
-          category: true,
-          reviews: { where: { isPublished: true }, select: { rating: true } },
-        },
-      }),
-      db.product.count({ where }),
-    ]);
+    const products = await db.product.findMany({
+      where,
+      orderBy,
+      take: limit + 1,
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+      include: {
+        images: { orderBy: { position: "asc" } },
+        category: true,
+        reviews: { where: { isPublished: true }, select: { rating: true } },
+      },
+    });
+    const total = await db.product.count({ where });
 
     const hasMore = products.length > limit;
     const items = hasMore ? products.slice(0, limit) : products;
@@ -72,7 +70,7 @@ export async function GET(request: NextRequest) {
       price: Number(p.price),
       comparePrice: p.comparePrice ? Number(p.comparePrice) : null,
       avgRating: p.reviews.length > 0
-        ? p.reviews.reduce((sum, r) => sum + r.rating, 0) / p.reviews.length
+        ? p.reviews.reduce((sum: number, r: { rating: number }) => sum + r.rating, 0) / p.reviews.length
         : 0,
       reviewCount: p.reviews.length,
     }));

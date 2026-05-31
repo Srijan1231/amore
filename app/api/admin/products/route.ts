@@ -22,20 +22,18 @@ export async function GET(request: NextRequest) {
         }
       : {};
 
-    const [products, total] = await Promise.all([
-      db.product.findMany({
-        where,
-        take: limit + 1,
-        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-        orderBy: { updatedAt: "desc" },
-        include: {
-          images: { orderBy: { position: "asc" }, take: 1 },
-          category: true,
-          _count: { select: { reviews: true, orderItems: true } },
-        },
-      }),
-      db.product.count({ where }),
-    ]);
+    const products = await db.product.findMany({
+      where,
+      take: limit + 1,
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+      orderBy: { updatedAt: "desc" },
+      include: {
+        images: { orderBy: { position: "asc" }, take: 1 },
+        category: true,
+        _count: { select: { reviews: true, orderItems: true } },
+      },
+    });
+    const total = await db.product.count({ where });
 
     const hasMore = products.length > limit;
     const items = hasMore ? products.slice(0, limit) : products;
@@ -60,7 +58,7 @@ export async function POST(request: NextRequest) {
     const parsed = createProductSchema.safeParse(body);
 
     if (!parsed.success) {
-      return errorResponse(parsed.error.issues.map((i) => i.message).join(", "));
+      return errorResponse(parsed.error.issues.map((i: { message: string }) => i.message).join(", "));
     }
 
     const slug = parsed.data.slug || generateSlug(parsed.data.name);
@@ -79,14 +77,14 @@ export async function POST(request: NextRequest) {
         publishedAt: parsed.data.isPublished ? new Date() : null,
         tags: parsed.data.tags,
         images: {
-          create: parsed.data.images.map((img, idx) => ({
+          create: parsed.data.images.map((img: { url: string; altText?: string; position?: number }, idx: number) => ({
             url: img.url,
             altText: img.altText,
             position: img.position ?? idx,
           })),
         },
         variants: {
-          create: parsed.data.variants.map((v) => ({
+          create: parsed.data.variants.map((v: { name: string; value: string; price?: number; inventory?: number; sku?: string }) => ({
             name: v.name,
             value: v.value,
             price: v.price,

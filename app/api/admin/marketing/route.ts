@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
     const parsed = couponSchema.safeParse(body);
 
     if (!parsed.success) {
-      return errorResponse(parsed.error.issues.map((i) => i.message).join(", "));
+      return errorResponse(parsed.error.issues.map((i: { message: string }) => i.message).join(", "));
     }
 
     const coupon = await db.coupon.create({

@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     const parsed = blogPostSchema.safeParse(body);
 
     if (!parsed.success) {
-      return errorResponse(parsed.error.issues.map((i) => i.message).join(", "));
+      return errorResponse(parsed.error.issues.map((i: { message: string }) => i.message).join(", "));
     }
 
     const post = await db.blogPost.create({

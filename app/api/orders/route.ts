@@ -15,19 +15,17 @@ export async function GET(request: NextRequest) {
       ...(status && { status: status as "PENDING" | "PROCESSING" | "FULFILLED" | "DELIVERED" | "CANCELLED" | "REFUNDED" }),
     };
 
-    const [orders, total] = await Promise.all([
-      db.order.findMany({
-        where,
-        take: limit + 1,
-        ...(cursor && { cursor: { id: cursor }, skip: 1 }),
-        orderBy: { createdAt: "desc" },
-        include: {
-          items: { include: { product: { include: { images: true } } } },
-          user: { select: { name: true, email: true } },
-        },
-      }),
-      db.order.count({ where }),
-    ]);
+    const orders = await db.order.findMany({
+      where,
+      take: limit + 1,
+      ...(cursor && { cursor: { id: cursor }, skip: 1 }),
+      orderBy: { createdAt: "desc" },
+      include: {
+        items: { include: { product: { include: { images: true } } } },
+        user: { select: { name: true, email: true } },
+      },
+    });
+    const total = await db.order.count({ where });
 
     const hasMore = orders.length > limit;
     const items = hasMore ? orders.slice(0, limit) : orders;

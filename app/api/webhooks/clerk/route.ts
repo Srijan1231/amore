@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Webhook } from "svix";
 import { db } from "@/lib/db";
 import { errorResponse } from "@/lib/api";
 
@@ -14,8 +15,28 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { type, data } = body as { type: string; data: ClerkUserData };
+    const secret = process.env.CLERK_WEBHOOK_SECRET;
+    if (!secret) {
+      return errorResponse("Webhook secret not configured", 500);
+    }
+
+    const body = await request.text();
+    const svixId = request.headers.get("svix-id");
+    const svixTimestamp = request.headers.get("svix-timestamp");
+    const svixSignature = request.headers.get("svix-signature");
+
+    if (!svixId || !svixTimestamp || !svixSignature) {
+      return errorResponse("Missing webhook signature headers", 400);
+    }
+
+    const wh = new Webhook(secret);
+    const payload = wh.verify(body, {
+      "svix-id": svixId,
+      "svix-timestamp": svixTimestamp,
+      "svix-signature": svixSignature,
+    }) as { type: string; data: ClerkUserData };
+
+    const { type, data } = payload;
 
     switch (type) {
       case "user.created": {

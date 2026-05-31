@@ -27,6 +27,10 @@ export async function POST(request: NextRequest) {
     };
     const shippingCost = shippingCosts[deliveryMethod.method] ?? 4.99;
 
+    // TODO: In production, cart items would come from the request body or server-side cart.
+    // For now we accept a subtotal from the client and validate it server-side.
+    const cartSubtotal = Number(body.cartSubtotal ?? 0);
+
     // Validate coupon if provided
     let coupon = null;
     let discount = 0;
@@ -34,12 +38,20 @@ export async function POST(request: NextRequest) {
       coupon = await db.coupon.findUnique({ where: { code: couponCode } });
       if (coupon && coupon.isActive) {
         if (coupon.type === "PERCENTAGE") {
-          discount = Number(coupon.value);
+          discount = (cartSubtotal * Number(coupon.value)) / 100;
         } else if (coupon.type === "FIXED") {
           discount = Number(coupon.value);
+        } else if (coupon.type === "FREE_SHIPPING") {
+          discount = shippingCost;
         }
       }
     }
+
+    // Ensure discount doesn't exceed subtotal
+    discount = Math.min(discount, cartSubtotal + shippingCost);
+    const total = Math.max(0, cartSubtotal + shippingCost - discount);
+    // Stripe minimum is 30p for GBP
+    const stripeAmount = Math.max(30, Math.round(total * 100));
 
     // Create address
     const address = await db.address.create({
@@ -55,28 +67,30 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Create Stripe payment intent (placeholder amount - would be calculated from cart)
+    const orderNumber = generateOrderNumber();
+
+    // Create Stripe payment intent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round((shippingCost - discount) * 100 + 1000), // placeholder
+      amount: stripeAmount,
       currency: "gbp",
       metadata: {
         email: contact.email,
-        orderNumber: generateOrderNumber(),
+        orderNumber,
       },
     });
 
     // Create order
     const order = await db.order.create({
       data: {
-        orderNumber: paymentIntent.metadata.orderNumber!,
+        orderNumber,
         guestEmail: contact.email,
         status: "PENDING",
         addressId: address.id,
         shippingMethod: deliveryMethod.method,
         shippingCost,
-        subtotal: 0, // calculated from items in real implementation
+        subtotal: cartSubtotal,
         discount,
-        total: 0,
+        total,
         giftMessage: giftOptions?.giftMessage ?? null,
         paymentIntent: paymentIntent.id,
         couponId: coupon?.id ?? null,

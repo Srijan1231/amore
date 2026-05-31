@@ -30,6 +30,10 @@ export async function POST(request: NextRequest) {
       return errorResponse("This coupon has expired");
     }
 
+    if (coupon.startsAt && new Date(coupon.startsAt) > new Date()) {
+      return errorResponse("This coupon is not yet active");
+    }
+
     if (coupon.maxUses && coupon.useCount >= coupon.maxUses) {
       return errorResponse("This coupon has reached its usage limit");
     }

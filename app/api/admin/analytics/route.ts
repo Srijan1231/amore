@@ -25,8 +25,8 @@ export async function GET() {
       db.order.count({ where: { status: "PENDING" } }),
     ]);
 
-    const paidOrders = recentOrders.filter((o) => o.status !== "CANCELLED" && o.status !== "REFUNDED");
-    const revenue = paidOrders.reduce((sum, o) => sum + Number(o.total), 0);
+    const paidOrders = recentOrders.filter((o: { total: unknown; status: string; createdAt: Date }) => o.status !== "CANCELLED" && o.status !== "REFUNDED");
+    const revenue = paidOrders.reduce((sum: number, o: { total: unknown; status: string; createdAt: Date }) => sum + Number(o.total), 0);
     const avgOrderValue = paidOrders.length > 0 ? revenue / paidOrders.length : 0;
 
     return successResponse({
